@@ -26,12 +26,17 @@ exports.getAllScreams=(request,response)=>{
 exports.postOneScream=(request,response)=>{
   const newScream={
     body:request.body.body,
-    //userHandle:reuquest.user.handle
-    userHandle:request.body.userHandle,
-    createdAt:admin.firestore.Timestamp.fromDate(new Date())
-  };
+    userHandle:request.user.userHandle,
+    createdAt:admin.firestore.Timestamp.fromDate(new Date()),
+    userImage:request.user.imageUrl,
+    createdAt:new Date().toISOString(),
+    likeCount:0,
+    commentCount:0
+};
   admin.firestore().collection('screams').add(newScream).then(doc=>{
-    response.json({message:`document ${doc.id} created successfully`})
+    const resScream=newScream;
+    resScream.screamId=doc.id;
+    response.json(resScream);
   }).catch(err =>{
     response.status(500).json({error:"something went wrong"});
     console.error(err);

@@ -186,7 +186,7 @@ exports.commentOnScream=(request,response)=>{
   const newComment={
     body:request.body.body,
     createdAt:new Date().toISOString(),
-    screamId:request.params.screamId;
+    screamId:request.params.screamId,
     userHandle:request.user.handle,
     userImage:request.user.imageUrl
   }
@@ -206,8 +206,65 @@ exports.commentOnScream=(request,response)=>{
 }
 
 exports.likeScream=(request,response)=>{
+const likeDocument=admin.firestore().collection('likes').where('userHandle','==',request.user.handle)
+.where('screamId','==',request.params.screamId).limit(1);
 
+const screamDocument=admin.firestore().collection(`/screams/${request.params.screamId}`);
+
+let screamData;
+screamDocument.get().then((doc)=>{
+  if(doc.exists){
+    screamData=doc.data();
+    screamData.screamId=doc.id;
+    return likeDocument.get();
+  }else{
+      return response.status(404).json({error:"Scream not found"});
+  }
+}).then(data=>{
+  if(data.empty){
+    return admin.firestore().collection('likes').add({
+      screamId:request.params.screamId,
+      userHandle:request.user.handle
+    }).then(()=>{
+      screamData.likeCount++;
+      return screamDocument.update({likeCount:screamData.likeCount})
+
+    }).then(()=>{
+      return response.json(screamData);
+    })
+  }else{
+    return response.json({error:'Scream already liked'});
+  }
+})
+.catch(error=>{
+  console.error(error);
+  response.status(500).json({error:error.code});
+})
 }
 exports.unlikeScream=(request,response)=>{
+  let screamData;
+  screamDocument.get().then((doc)=>{
+    if(doc.exists){
+      screamData=doc.data();
+      screamData.screamId=doc.id;
+      return likeDocument.get();
+    }else{
+        return response.status(404).json({error:"Scream not found"});
+    }
+  }).then(data=>{
+    if(data.empty){
+      return resposne.json({error:'Scream not liked'})
 
+    }else{
+      admin.firestore().doc(`/likes/${data.docs[0].data().id}`).delete()
+      .then(()=>{
+        screamData.likeCount--;
+        return screamDocument.update({likeCount:screamData.likeCount});
+      })
+    }
+  })
+  .catch(error=>{
+    console.error(error);
+    response.status(500).json({error:error.code});
+  })
 }

@@ -31,7 +31,7 @@ const {
   getAuthenticatedUser,
   getScream,
   deleteScream,
-  commentScream,
+  commentOnScream,
   likeScream,
   unlikeScream}=require('./handlers/users.js');
 
@@ -44,7 +44,7 @@ app.post('/scream',FBAuth,postOneScream);
 app.get('/scream/:screamId',getScream);
 // app.get('/scream/:screamId',deleteScream);
  app.get('/scream/:screamId/like',FBAuth,likeScream);
- app.get('/scream/:screamId/unlike',,FBAuth,unlikeScream);
+ //app.get('/scream/:screamId/unlike',,FBAuth,unlikeScream);
  app.post('/scream/:screamId/comment',FBAuth,commentOnScream);
 
 //user routes
