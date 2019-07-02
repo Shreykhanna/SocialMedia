@@ -158,7 +158,7 @@ busboy.on('finish',function(){
 response.writeHead(404);
 response.end();
 }
-
+//getAllScreams function
 exports.getScream=(request,response)=>{
   let screamData={};
   admin.firestore().doc(`/user/${request.param.screamId}`).get()
@@ -181,6 +181,7 @@ exports.getScream=(request,response)=>{
   })
 }
 
+//commentOnScream function
 exports.commentOnScream=(request,response)=>{
   if(request.body.body.trim()==='')return response.status(400).json({error:'Must not be empty'});
   const newComment={
@@ -195,7 +196,9 @@ exports.commentOnScream=(request,response)=>{
     if(!doc.exists()){
       return request.status(404).json({error:"Scream Does not exists"});
     }
-    return admin.firestore().collection('comments').add(newComment);
+    return admin.firestore().ref.update({commentCount:doc.data().commentCount+1});
+  }).then(()=>{
+    return request.json(newComment);
   }).then(()=>{
     request.json(newComment)
   })
@@ -205,6 +208,7 @@ exports.commentOnScream=(request,response)=>{
   })
 }
 
+//likeScream function
 exports.likeScream=(request,response)=>{
 const likeDocument=admin.firestore().collection('likes').where('userHandle','==',request.user.handle)
 .where('screamId','==',request.params.screamId).limit(1);
@@ -241,6 +245,7 @@ screamDocument.get().then((doc)=>{
   response.status(500).json({error:error.code});
 })
 }
+//unlikeScream function
 exports.unlikeScream=(request,response)=>{
   let screamData;
   screamDocument.get().then((doc)=>{
@@ -253,13 +258,15 @@ exports.unlikeScream=(request,response)=>{
     }
   }).then(data=>{
     if(data.empty){
-      return resposne.json({error:'Scream not liked'})
-
+      return response.json({error:'Scream not liked'})
     }else{
-      admin.firestore().doc(`/likes/${data.docs[0].data().id}`).delete()
+      admin.firestore().doc(`/likes/${data.docs[0].id}`).delete()
       .then(()=>{
         screamData.likeCount--;
         return screamDocument.update({likeCount:screamData.likeCount});
+      })
+      .then(()=>{
+        return response.json(screamData);
       })
     }
   })
@@ -267,4 +274,21 @@ exports.unlikeScream=(request,response)=>{
     console.error(error);
     response.status(500).json({error:error.code});
   })
+}
+//Deletescream function
+exports.deleteScream=(request,response)=>{
+  const document=admin.firestore().doc(`/screams/${request.params.screamId}`);
+  document.get().then(doc=>{
+    if(!doc.exists())return response.status(404).json({error:'Scream not found'});
+    if(doc.data().userHandle!==request.params.handle){
+      return response.status(403).json({error:"Unauthorized"})
+    }else{
+      return document.delete();
+    }
+}).then(()=>{
+  return response.json({messsge:"Scream deleted"});
+}).catch(error=>{
+  console.error(error);
+  return response.status(400).json({error:error.code});
+})
 }
