@@ -1,7 +1,5 @@
 
-//const {admin,db}=require('../utils/admin');
 const firebase=require('firebase');
-//const {firebaseConfig}=require('../utils/config');
 const{validateSignUpData,validateLoginData,reduceUserDetails}=require('../utils/validators');
 const admin=require('firebase-admin');
 const firebaseConfig = {
@@ -58,6 +56,7 @@ admin.firestore().doc(`/user/${newUser.handle}`)
   }
 });
 }
+//Login function
 exports.login=(request,response)=>{
   const user={
     email:request.body.email,
@@ -77,9 +76,9 @@ exports.login=(request,response)=>{
     return response.status(500).json({error:error.code});
   })
 }
+//Add user details
 exports.addUserDetails=(request,response)=>{
 let userDetails=reduceUserDetails(request.body);
-
 admin.firestore().doc(`user/${newUser.handle}`).update(userDetails)
 .then(()=>{
   return response.json({message:`Details added successfully`});
@@ -88,6 +87,36 @@ admin.firestore().doc(`user/${newUser.handle}`).update(userDetails)
   return response.status(400).json({error:error.code});
 })
 }
+
+//Get other user details
+exports.getUserDetails=(request,response)=>{
+  let userData={};
+  admin.firestore.doc(`/users/${request.params.handle}`).get().then(doc=>{
+    if(doc.exists){
+      userData.user=doc.data;
+      return admin.firestore.collection('screams').where('userHandle','==',request.params.handle).orderBy('createdAt','desc').get();
+    }
+  }).then(data=>{
+    userData.screams=[];
+    data.forEach(doc=>{
+      userData.screams.push({
+         body:doc.data().body,
+         createdAt:doc.data().createdAt,
+         userHandle:doc.data().userHandle,
+         userImage:doc.data().userImage,
+         likeCount:doc.data().likeCount,
+         commentCount:doc.data().commentCount,
+         screamId:doc.id
+        })
+    })
+    return response.json(userData);
+  })
+  .catch(error=>{
+    console.error(error);
+    return response.status(500).json({error:error.code});
+  })
+}
+
 
 //Get Own user details
 exports.getAuthenticatedUser=(request,response)=>{
@@ -104,6 +133,21 @@ exports.getAuthenticatedUser=(request,response)=>{
     data.forEach(doc=>{
       userData.likes.push(doc.data());
     });
+    return asmin.firestore.collection('notifications').where('recipient','==',request.user.handle)
+    .orderby('createdAt','desc').limit(10).get();
+  }).then(data=>{
+    userData.notifications=[];
+    data.forEach(doc=>{
+      userData.notifications.push({
+        recipient:doc.data().recipient,
+        screamId:doc.data().screamId,
+        sender:doc.data().sender,
+        reciever:doc.data().reciever,
+        type:doc.data().type,
+        read:doc.data().read,
+        notificationId:doc.id
+      })
+    })
     return response.json(userData);
   })
   .catch(error=>{
@@ -158,137 +202,18 @@ busboy.on('finish',function(){
 response.writeHead(404);
 response.end();
 }
-//getAllScreams function
-exports.getScream=(request,response)=>{
-  let screamData={};
-  admin.firestore().doc(`/user/${request.param.screamId}`).get()
-  .then(doc=>{
-    if(!doc.exists())return response.status(400).json({message:"Scream not found "})
-
-    screamData=doc.data();
-    screamData.screamId=doc.id;
-    return admin.firestore().collection('comments').orderby('createdAt','desc').where('screamId','==',request.params.screamId).get();
-  })
-  .then(data=>{
-    screamData.comments=[];
-    data.forEach(doc=>{
-    screamData.comments.push(doc.data());
-    })
-    return response.json(screamData);
-  }).catch(error=>{
-    console.log(error);
-    return response.status(400).json({error:error.code});
-  })
-}
-
-//commentOnScream function
-exports.commentOnScream=(request,response)=>{
-  if(request.body.body.trim()==='')return response.status(400).json({error:'Must not be empty'});
-  const newComment={
-    body:request.body.body,
-    createdAt:new Date().toISOString(),
-    screamId:request.params.screamId,
-    userHandle:request.user.handle,
-    userImage:request.user.imageUrl
-  }
-  admin.firestore().doc(`/user/${request.params.screams}`).get()
-  .then(doc=>{
-    if(!doc.exists()){
-      return request.status(404).json({error:"Scream Does not exists"});
-    }
-    return admin.firestore().ref.update({commentCount:doc.data().commentCount+1});
-  }).then(()=>{
-    return request.json(newComment);
-  }).then(()=>{
-    request.json(newComment)
-  })
-  .catch(error=>{
-    console.error(error);
-    return request.status(500).json({error:error.code});
-  })
-}
-
-//likeScream function
-exports.likeScream=(request,response)=>{
-const likeDocument=admin.firestore().collection('likes').where('userHandle','==',request.user.handle)
-.where('screamId','==',request.params.screamId).limit(1);
-
-const screamDocument=admin.firestore().collection(`/screams/${request.params.screamId}`);
-
-let screamData;
-screamDocument.get().then((doc)=>{
-  if(doc.exists){
-    screamData=doc.data();
-    screamData.screamId=doc.id;
-    return likeDocument.get();
-  }else{
-      return response.status(404).json({error:"Scream not found"});
-  }
-}).then(data=>{
-  if(data.empty){
-    return admin.firestore().collection('likes').add({
-      screamId:request.params.screamId,
-      userHandle:request.user.handle
-    }).then(()=>{
-      screamData.likeCount++;
-      return screamDocument.update({likeCount:screamData.likeCount})
-
-    }).then(()=>{
-      return response.json(screamData);
-    })
-  }else{
-    return response.json({error:'Scream already liked'});
-  }
-})
-.catch(error=>{
+//markNotificationsRead function
+exports.markNotificationsRead=(request,response)=>{
+  let batch=admin.firestore.batch();
+  request.body.forEach(notificatonId=>{
+  const notification=admin.firestore.doc(`/notifications/${notificationId}`);
+  batch.update(notification,{read:true});
+});
+batch.commit()
+.then(()=>{
+  return response.json({message:'Notifications marked read'});
+}).catch((error)=>{
   console.error(error);
-  response.status(500).json({error:error.code});
-})
-}
-//unlikeScream function
-exports.unlikeScream=(request,response)=>{
-  let screamData;
-  screamDocument.get().then((doc)=>{
-    if(doc.exists){
-      screamData=doc.data();
-      screamData.screamId=doc.id;
-      return likeDocument.get();
-    }else{
-        return response.status(404).json({error:"Scream not found"});
-    }
-  }).then(data=>{
-    if(data.empty){
-      return response.json({error:'Scream not liked'})
-    }else{
-      admin.firestore().doc(`/likes/${data.docs[0].id}`).delete()
-      .then(()=>{
-        screamData.likeCount--;
-        return screamDocument.update({likeCount:screamData.likeCount});
-      })
-      .then(()=>{
-        return response.json(screamData);
-      })
-    }
-  })
-  .catch(error=>{
-    console.error(error);
-    response.status(500).json({error:error.code});
-  })
-}
-//Deletescream function
-exports.deleteScream=(request,response)=>{
-  const document=admin.firestore().doc(`/screams/${request.params.screamId}`);
-  document.get().then(doc=>{
-    if(!doc.exists())return response.status(404).json({error:'Scream not found'});
-    if(doc.data().userHandle!==request.params.handle){
-      return response.status(403).json({error:"Unauthorized"})
-    }else{
-      return document.delete();
-    }
-}).then(()=>{
-  return response.json({messsge:"Scream deleted"});
-}).catch(error=>{
-  console.error(error);
-  return response.status(400).json({error:error.code});
-})
+  return response.status(500).json({error:error.code});
+});
 }
